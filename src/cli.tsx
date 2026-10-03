@@ -27,11 +27,11 @@ const HELP = `
     --plain, --accessible   plain accessible text mode (no alt-screen)
     --no-mouse              disable mouse tracking to allow native text selection
     --no-motion             disable animated shimmer/sweeps
-    -o, --output <dir>      save downloads to custom directory (default: ~/Downloads)
+    -o, --output <dir>      save downloads to custom directory (default: current directory ./)
     -h, --help              show this help
     -v, --version           show version
 
-  Downloads are saved to ~/Downloads (or configured output directory).
+  Downloads are saved to current directory ./ by default (press ^d in app for ~/Downloads).
   Powered by yt-dlp — YouTube, X, Instagram, Threads, TikTok & 1800+ sites.
 `
 

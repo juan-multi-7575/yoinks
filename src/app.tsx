@@ -29,7 +29,8 @@ import {
   type VideoInfo,
 } from './lib/ytdlp.js'
 
-const OUT_DIR = path.join(os.homedir(), 'Downloads')
+const DOWNLOADS_DIR = path.join(os.homedir(), 'Downloads')
+const CWD_DIR = process.cwd()
 const YOINK_BUTTON = 'yoink'
 const DONE_LABEL = '↵ yoink another'
 const TAGLINE = 'yoink any video. paste. yoink. done.'
@@ -190,6 +191,12 @@ function AppContent({
   const infoJsonRef = useRef<string | undefined>(undefined)
   const abortRef = useRef<AbortController | undefined>(undefined)
   const [phase, setPhase] = useState<Phase>(initialUrl ? {name: 'probing', status: 'warming up…'} : {name: 'input'})
+  const [saveTarget, setSaveTarget] = useState<'cwd' | 'downloads'>('cwd')
+  const activeOutDir = outputDir ?? (saveTarget === 'cwd' ? CWD_DIR : DOWNLOADS_DIR)
+
+  const toggleSaveTarget = useCallback(() => {
+    setSaveTarget(prev => (prev === 'cwd' ? 'downloads' : 'cwd'))
+  }, [])
 
   const columns = stdout?.columns && stdout.columns > 0 ? stdout.columns : 80
   const boxWidth = Math.max(14, Math.min(64, columns - 6))
@@ -260,6 +267,10 @@ function AppContent({
         else if (phase.name !== 'input') resetToInput()
         return
       }
+      if (key.ctrl && input === 'd' && !outputDir) {
+        toggleSaveTarget()
+        return
+      }
       if (key.escape && (phase.name === 'picking' || phase.name === 'error' || phase.name === 'done')) resetToInput()
       if (key.escape && (phase.name === 'probing' || phase.name === 'downloading')) cancelRun()
       if (key.return && (phase.name === 'error' || phase.name === 'done')) resetToInput()
@@ -294,7 +305,7 @@ function AppContent({
       }
       try {
         const ffmpegLocation = await findFfmpeg()
-        const targetDir = outputDir || OUT_DIR
+        const targetDir = activeOutDir
         const base = {ytdlp: ytdlpRef.current, ffmpegLocation, url, choice, outDir: targetDir}
         let filepath: string
         try {
@@ -325,10 +336,16 @@ function AppContent({
     })()
   }
 
-  let hints: Array<[string, string]> = [...HINTS[phase.name], ['^t', `theme:${theme.mode}`]]
-  if (phase.name === 'input' && history.length > 0) {
-    hints = [hints[0]!, ['↑', 'history'], ...hints.slice(1)]
+  let hints: Array<[string, string]> = [...HINTS[phase.name]]
+  if (phase.name === 'input') {
+    if (history.length > 0) {
+      hints.push(['↑', 'history'])
+    }
+    if (!outputDir) {
+      hints.push(['^d', saveTarget === 'cwd' ? 'to:Downloads' : 'to:./'])
+    }
   }
+  hints.push(['^t', `theme:${theme.mode}`])
 
   // Anything a mouse user would expect to press is clickable. Targets are
   // found by their text in the rendered frame (see lib/click-map.ts), so
@@ -336,6 +353,7 @@ function AppContent({
   const hintAction = (key: string): (() => void) | undefined => {
     if (key === '^c') return () => exit()
     if (key === '^t') return cycleTheme
+    if (key === '^d' && !outputDir) return toggleSaveTarget
     if (key === '^h') return phase.name === 'probing' || phase.name === 'downloading' ? cancelRun : resetToInput
     if (key === 'esc') return phase.name === 'probing' || phase.name === 'downloading' ? cancelRun : resetToInput
     if (key === '↵') {
@@ -349,6 +367,9 @@ function AppContent({
   if (phase.name === 'input') {
     // the frame button rows above/below the label are part of the button
     clickTargets.push({match: `  ${YOINK_BUTTON}  `, padY: 1, action: () => handleUrlSubmit(urlInput)})
+    if (!outputDir) {
+      clickTargets.push({match: '^d to switch', action: toggleSaveTarget})
+    }
   }
   if (phase.name === 'picking') {
     for (const [index, choice] of choices.entries()) {
@@ -404,6 +425,11 @@ function AppContent({
               }}
             />
           </FramedInput>
+          <Gap />
+          <Text color={theme.gray} dimColor={theme.dimSecondary}>
+            saving to: <Text color={theme.primary}>{outputDir ? shortenPath(outputDir, os.homedir(), 30) : saveTarget === 'cwd' ? './ (current folder)' : '~/Downloads'}</Text>
+            {!outputDir ? <Text> · ^d to switch</Text> : null}
+          </Text>
           {phase.warning ? (
             <Text color={theme.gray} dimColor={theme.dimSecondary}>✗ {phase.warning}</Text>
           ) : clipboardOffered ? (
